@@ -1,0 +1,134 @@
+/*************************************************
+ * Setup.gs
+ *************************************************/
+
+/**
+ * Run ONLY ONCE
+ *
+ * Creates the On Form Submit trigger.
+ */
+function setup() {
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Remove old triggers
+  const triggers = ScriptApp.getProjectTriggers();
+
+  triggers.forEach(trigger => {
+
+    if (trigger.getHandlerFunction() == "onFormSubmit") {
+
+      ScriptApp.deleteTrigger(trigger);
+
+    }
+
+  });
+
+  // Create Trigger
+  ScriptApp.newTrigger("onFormSubmit")
+    .forSpreadsheet(ss)
+    .onFormSubmit()
+    .create();
+
+  SpreadsheetApp.getUi().alert(
+    "Setup completed successfully."
+  );
+
+}
+
+
+/**
+ * Reset Receipt Numbers
+ */
+function resetReceiptNumbers(){
+
+  PropertiesService
+    .getScriptProperties()
+    .deleteProperty("LAST_RECEIPT_NO");
+
+  Logger.log("Receipt number reset.");
+
+}
+
+
+/**
+ * Verify all configuration values
+ */
+function verifyConfiguration(){
+
+  try{
+
+    DriveApp.getFileById(CONFIG.TEMPLATE_ID);
+
+    Logger.log("✓ Template Found");
+
+  }catch(e){
+
+    Logger.log("✗ Invalid Template");
+
+  }
+
+  try{
+
+    DriveApp.getFolderById(CONFIG.OUTPUT_FOLDER_ID);
+
+    Logger.log("✓ Output Folder Found");
+
+  }catch(e){
+
+    Logger.log("✗ Invalid Output Folder");
+
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  if(ss.getSheetByName(CONFIG.PRICE_SHEET)){
+
+    Logger.log("✓ Products & Prices Sheet Found");
+
+  }else{
+
+    Logger.log("✗ Products & Prices Sheet Missing");
+
+  }
+
+  if(ss.getSheetByName(CONFIG.RESPONSE_SHEET)){
+
+    Logger.log("✓ Response Sheet Found");
+
+  }else{
+
+    Logger.log("✗ Response Sheet Missing");
+
+  }
+
+}
+
+
+/**
+ * Test Receipt Generation
+ */
+function testLastSubmission() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.RESPONSE_SHEET);
+  
+  if (!sheet) {
+    throw new Error("Response sheet '" + CONFIG.RESPONSE_SHEET + "' not found.");
+  }
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    throw new Error("No form submissions found in the sheet.");
+  }
+
+  // Create a proper mock event object
+  const fakeEvent = {
+    range: {
+      getSheet: function() { return sheet; },
+      getRow: function() { return lastRow; }
+    }
+  };
+
+  Logger.log("DEBUG: Testing row " + lastRow);
+  onFormSubmit(fakeEvent);
+}

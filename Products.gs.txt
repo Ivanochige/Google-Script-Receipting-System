@@ -1,0 +1,86 @@
+/*************************************************
+ * Products.gs (UPDATED & BULLETPROOF)
+ *************************************************/
+
+function getProductsFromSubmission(headers, rowData) {
+  Logger.log("DEBUG: Starting getProductsFromSubmission");
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const priceSheet = ss.getSheetByName(CONFIG.PRICE_SHEET);
+
+  if (!priceSheet) {
+    throw new Error("Price sheet '" + CONFIG.PRICE_SHEET + "' not found.");
+  }
+
+  const priceData = priceSheet.getDataRange().getValues();
+  if (priceData.length < 2) {
+    throw new Error("Products & Prices sheet is empty.");
+  }
+
+  // Normalize headers to lowercase for safer matching
+  const priceHeaders = priceData[0].map(h => String(h).trim().toLowerCase());
+  const productCol = priceHeaders.findIndex(h => h === "product");
+  const priceCol = priceHeaders.findIndex(h => h.includes("unit cost") || h.includes("price"));
+
+  if (productCol === -1 || priceCol === -1) {
+    throw new Error("Products & Prices sheet must contain 'Product' and 'Unit Cost' (or 'Price') columns. Found: " + JSON.stringify(priceData[0]));
+  }
+
+  // Build lookup table (store keys in lowercase for case-insensitive matching)
+  const prices = {};
+  for (let i = 1; i < priceData.length; i++) {
+    const product = String(priceData[i][productCol]).trim();
+    const price = Number(priceData[i][priceCol]);
+    if (product !== "") {
+      prices[product.toLowerCase()] = price; 
+    }
+  }
+
+  const items = [];
+  let grandTotal = 0;
+
+  for (let i = 1; i <= 14; i++) {
+    const productIndex = headers.findIndex(h => String(h).includes(`(Prod ${i})`));
+    const quantityIndex = headers.findIndex(h => String(h).includes(`(Qty ${i})`));
+
+    if (productIndex === -1 || quantityIndex === -1) {
+      continue;
+    }
+
+    const product = String(rowData[productIndex]).trim();
+    const quantity = Number(rowData[quantityIndex]);
+
+    if (!product || quantity <= 0) {
+      continue;
+    }
+
+    // Case-insensitive lookup
+    const productLower = product.toLowerCase();
+    if (!(productLower in prices)) {
+      throw new Error("Price not found for product: '" + product + "'. Check your 'Products & Prices' sheet for typos or case differences. Available: " + Object.keys(prices).join(", "));
+    }
+
+    const unitPrice = prices[productLower];
+    const lineTotal = quantity * unitPrice;
+    grandTotal += lineTotal;
+
+    items.push({
+      product: product, // Keep original casing for the receipt
+      quantity: quantity,
+      unitPrice: unitPrice,
+      lineTotal: lineTotal
+    });
+  }
+
+  if (items.length === 0) {
+    throw new Error("No products were selected in the form submission. Check that form headers match '(Prod 1)', '(Qty 1)', etc.");
+  }
+
+  Logger.log("DEBUG: Successfully found " + items.length + " items. Grand Total: " + grandTotal);
+
+  // GUARANTEE: Explicitly return the object. Do NOT put a line break between 'return' and '{'
+  return {
+    items: items,
+    grandTotal: grandTotal
+  };
+}
